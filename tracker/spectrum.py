@@ -167,8 +167,10 @@ class Spectrum:
 # a second to delete; a word cut from the alert may never be noticed. So
 # each rule below removes something only where it cannot be the alert.
 
-# A line holding only the sign-off or desk initials: "PTI GMS SSK", "GK".
-_SIGN_OFF_LINE = re.compile(r"(PTI\s+)?[A-Z]{1,5}(\s+[A-Z]{1,5})*")
+# Reporters' and editors' initials: "GK", "ASK/SKC" when two filed together.
+_INITIALS = r"[A-Z]{1,5}(?:/[A-Z]{1,5})*"
+# A line holding only the sign-off or desk initials: "PTI GMS SSK", "ZMN".
+_SIGN_OFF_LINE = re.compile(rf"(PTI\s+)?{_INITIALS}(\s+{_INITIALS})*")
 # Where a sentence has plainly ended.
 _CLOSED = re.compile(r"[.!?'\"\u2019\u201d)]$")
 # The sign-off at the very end of the last line, straight after the
@@ -176,13 +178,13 @@ _CLOSED = re.compile(r"[.!?'\"\u2019\u201d)]$")
 # "... early trade. PTI DRR." Because it must follow closing punctuation,
 # "... Minister told PTI" or "... to PTI." at the end of an alert is left
 # alone -- there a word, not a full stop, comes before PTI.
-_SIGN_OFF_END = re.compile(r"(?<=[.!?'\"\u2019\u201d)])\s+PTI(\s+[A-Z]{1,5})*\.?\s*$")
+_SIGN_OFF_END = re.compile(rf"(?<=[.!?'\"\u2019\u201d)])\s+PTI(\s+{_INITIALS})*\.?\s*$")
 
 
 def _finished(line: str) -> bool:
     """Has the text plainly ended by the end of this line?"""
     return bool(_CLOSED.search(line) or _SIGN_OFF_END.search(line)
-                or re.fullmatch(r"PTI(\s+[A-Z]{1,5})*\.?", line))
+                or re.fullmatch(rf"PTI(\s+{_INITIALS})*\.?", line))
 
 
 def parse_message(message: str, slug: str = "") -> tuple:

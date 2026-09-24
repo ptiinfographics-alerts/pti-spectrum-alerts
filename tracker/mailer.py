@@ -81,6 +81,25 @@ def label(alert) -> str:
     return "CORRECTED" if stories.is_marked_correction(alert) else "RE-FILED"
 
 
+SUBJECT_CHARS = 80
+URGENT_MARK = "\U0001F534"      # red circle, before an urgent alert's subject
+
+
+def _short(text: str, limit: int = SUBJECT_CHARS) -> str:
+    """At most `limit` characters, cut between words. The whole alert is
+    always in the email itself."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit + 1].rsplit(" ", 1)[0] if " " in text[:limit + 1] else text[:limit]
+    return cut.rstrip(" ,;:-\u2013\u2014") + "\u2026"
+
+
+def _item(slug: str) -> str:
+    """DEL060 -- the item code alone, for the list of earlier alerts."""
+    code, number = stories.desk(slug)
+    return f"{code}{number:03d}" if code else ""
+
+
 def _card(alert, show_earlier: bool = True) -> str:
     kind = label(alert)
     tags = (_tag("URG", RED_WASH, RED_INK) if alert.urgent else "") + \
@@ -88,6 +107,7 @@ def _card(alert, show_earlier: bool = True) -> str:
     copy, notes, was_story = stories.clean(alert.text)
     rule = AMBER if kind else (RED if alert.urgent else NAVY)
     small = f"font:400 12px/1.5 {FONT};color:{GREY};margin-top:6px;"
+    mono = "font:400 11px/1.4 ui-monospace,Menlo,monospace;"
 
     extra = "".join(f'<div style="{small}">(Eds: {html.escape(n)})</div>' for n in notes)
     if was_story:
@@ -101,32 +121,34 @@ def _card(alert, show_earlier: bool = True) -> str:
                 for w, changed in stories.changed_words(old.text, alert.text))
             held = " · not emailed" if old.held else ""
             extra += f"""
-          <div style="background:#F6F7F9;border-radius:6px;padding:10px 12px;margin-top:12px;
+          <div style="background:#F3F4F6;border-radius:6px;padding:10px 12px;margin-top:14px;
                       font:400 13px/1.5 {FONT};color:#374151;">
             <div style="font-size:12px;color:{GREY};margin-bottom:4px;">Earlier version ·
-              {old.filed:%H:%M} IST · {html.escape(stories.readable(old.slug))}{held} ·
+              {old.filed:%H:%M} IST · <span style="{mono}">{html.escape(stories.readable(old.slug))}</span>{held} ·
               differences highlighted</div>{words}
           </div>"""
         else:
             extra += f'<div style="{small}">Earlier version not found on today\'s wire.</div>'
 
     if alert.earlier and show_earlier:
+        # Newest first, like the email itself; each row its own item code.
         rows = "".join(
-            f'<div style="margin-top:4px;"><span style="font-variant-numeric:tabular-nums;">'
-            f'{e.filed:%H:%M}</span> &nbsp;{html.escape(stories.clean(e.text)[0])}</div>'
-            for e in alert.earlier)
+            f'<div style="padding:7px 0;border-top:1px solid #D1D5DB;">'
+            f'<span style="font-weight:600;font-variant-numeric:tabular-nums;">{e.filed:%H:%M}</span>'
+            f' &nbsp;<span style="{mono}">{html.escape(_item(e.slug))}</span><br>'
+            f'{html.escape(stories.clean(e.text)[0])}</div>'
+            for e in sorted(alert.earlier, key=stories.order, reverse=True))
         extra += f"""
-          <div style="border-top:1px dashed #d1d5db;margin-top:12px;padding-top:8px;
-                      font:400 12px/1.5 {FONT};color:#9ca3af;">
-            <div style="font-weight:600;letter-spacing:.04em;">EARLIER ALERTS, SAME SLUG</div>{rows}
+          <div style="background:#F3F4F6;border-radius:6px;margin-top:16px;padding:8px 12px 2px;
+                      font:400 12px/1.5 {FONT};color:{GREY};">
+            <div style="font-weight:600;letter-spacing:.04em;padding-bottom:6px;">EARLIER ALERTS, SAME SLUG</div>{rows}
           </div>"""
 
     return f"""
-        <div style="border-left:3px solid {rule};padding:12px 14px;margin-bottom:14px;background:#fff;">
-          <div style="font:400 12px/1.4 {FONT};color:{GREY};margin-bottom:8px;">{tags}{html.escape(_where(alert))}</div>
+        <div style="border-left:3px solid {rule};padding:12px 14px;margin-bottom:18px;background:#fff;">
+          <div style="font:400 12px/1.6 {FONT};color:{GREY};margin-bottom:8px;">{tags}{html.escape(_where(alert))}
+            · <span style="{mono}">{html.escape(stories.readable(alert.slug))}</span></div>
           <div style="font:600 17px/1.45 {FONT};color:#111827;">{html.escape("News Alert! " + copy)}</div>{extra}
-          <div style="font:400 11px/1.4 ui-monospace,Menlo,monospace;color:#9ca3af;margin-top:10px;">
-            {html.escape(stories.readable(alert.slug))}</div>
         </div>"""
 
 
@@ -135,17 +157,17 @@ def build_alerts(alerts: list) -> tuple:
     alerts = sorted(alerts, key=stories.order, reverse=True)
     latest = alerts[0]
     lead = stories.clean(latest.text)[0] or latest.slug
-    # Tags in front describe the headline they sit next to, never another
+    # Marks in front describe the headline they sit next to, never another
     # alert; what is further down the email is counted instead.
-    marks = [m for m in (("URG" if latest.urgent else ""), label(latest)) if m]
-    subject = (f"[{' · '.join(marks)}] " if marks else "") + lead
+    marks = (URGENT_MARK + " " if latest.urgent else "") + (label(latest) + " · " if label(latest) else "")
     if len(alerts) > 1:
         others = alerts[1:]
         counts = [(sum(a.urgent for a in others), "URG")] + \
             [(sum(label(a) == k for a in others), k.lower()) for k in ("CORRECTED", "RE-FILED")]
         inside = [f"{n} {name}" for n, name in counts if n]
-        subject = (f"{len(alerts)} alerts{' incl. ' + ', '.join(inside) + ' below' if inside else ''}: "
-                   + subject)
+        marks = f"{len(alerts)} alerts{' (' + ', '.join(inside) + ' below)' if inside else ''}: " + marks
+    # About 80 characters in all, marks included; the alert is cut to fit.
+    subject = marks + _short(lead, max(SUBJECT_CHARS - len(marks), 40))
 
     # The line Gmail shows after the subject in the inbox.
     if len(alerts) == 1:
@@ -165,7 +187,7 @@ def build_alerts(alerts: list) -> tuple:
     body = f"""{hidden}<div style="max-width:640px;margin:0 auto;padding:16px 12px;background:#fff;">
       {''.join(cards)}
     </div>"""
-    return subject[:180], body
+    return subject, body
 
 
 def build_notice(headline: str, paragraphs: list) -> str:

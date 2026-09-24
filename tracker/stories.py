@@ -21,7 +21,7 @@ import difflib
 import re
 
 SIMILAR = 0.80          # this close in wording, on the same slug = a re-file
-EARLIER_SHOWN = 3
+EARLIER_SHOWN = 10
 
 _DESK = re.compile(r"^\s*([A-Z]{3})(\d+)\s*-\s*", re.I)
 _CORRECTED = re.compile(r"\(\s*CORRECTED\s*\)", re.I)

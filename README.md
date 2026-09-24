@@ -22,8 +22,9 @@ evidence; it does not say what anything means or what to do about it.
 - **The copy line.** Each alert reads `News Alert! <the alert's words>` and
   nothing else, ready to paste. PTI's editors' notes, such as
   "(Eds: CORRECTS TEAM)", are shown verbatim underneath.
-- **`URG`** when PTI filed the alert as urgent (`$URG` on the wire rather
-  than `$PRI`). PTI's own priority, not the tracker's judgement.
+- **`URG`** in the email, and 🔴 at the start of the subject, when PTI filed
+  the alert as urgent (`$URG` on the wire rather than `$PRI`). PTI's own
+  priority, not the tracker's judgement.
 - **`CORRECTED`** when PTI itself marked the alert `(CORRECTED)` or
   "Eds: corrects".
 - **`RE-FILED`** when the same item number was filed again with different
@@ -31,15 +32,17 @@ evidence; it does not say what anything means or what to do about it.
 - For both, the **earlier version** is shown with its time and slug, and the
   words that differ are highlighted. "Not emailed" is added when the tracker
   held the earlier version back because both arrived in the same check.
-- **Earlier alerts, same slug**, greyed out underneath, each with the time it
-  was filed.
+- **Earlier alerts, same slug**, in a grey box underneath, newest first, up
+  to ten. Each shows the time it was filed and its own item code (DEL060).
+- The alert's own slug sits on the top line, beside its time.
 - **The later version stands.** An alert and its re-file in the same check:
   only the later one is sent, with the earlier shown as above. An exact
   repeat (identical text, same or lower priority) is not sent. Any
   difference at all, even a comma or PRI raised to URG, is sent.
 - **Newest first.** An email with several alerts lists the latest at the top.
-- Tags in the subject belong to the headline they sit next to. Tagged alerts
-  further down are counted: "3 alerts incl. 1 re-filed below: ...".
+- **Subjects run to about 80 characters**, cut between words. Marks belong to
+  the headline they sit next to. Alerts further down are counted:
+  "3 alerts (1 URG, 1 re-filed below): ...".
 
 Nothing counts alerts ("2nd alert on this story"). PTI's numbering in slugs
 skips, repeats and drops numbers too often to state as fact. Alerts are
