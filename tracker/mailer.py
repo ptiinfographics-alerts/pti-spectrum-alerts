@@ -131,14 +131,23 @@ def _card(alert, show_earlier: bool = True) -> str:
 
 
 def build_alerts(alerts: list) -> tuple:
-    """One email for everything new in a check, in the order PTI filed it."""
-    alerts = sorted(alerts, key=stories.order)
-    latest = alerts[-1]
+    """One email for everything new in a check, newest first, as the wire
+    reads: a later alert is the one that stands."""
+    alerts = sorted(alerts, key=stories.order, reverse=True)
+    latest = alerts[0]
     lead = stories.clean(latest.text)[0] or latest.slug
-    marks = ("URG" if any(a.urgent for a in alerts) else "",
-             "CORRECTION" if any(a.kind == "correction" for a in alerts) else "")
-    prefix = f"[{' · '.join(m for m in marks if m)}] " if any(marks) else ""
-    subject = prefix + (lead if len(alerts) == 1 else f"{len(alerts)} alerts: {lead}")
+    # Tags in front describe the headline they sit next to, never another
+    # alert: an urgent alert or a correction elsewhere in the email is counted.
+    marks = [m for m, on in (("URG", latest.urgent), ("CORRECTION", latest.kind == "correction")) if on]
+    subject = (f"[{' · '.join(marks)}] " if marks else "") + lead
+    if len(alerts) > 1:
+        others = alerts[1:]
+        urgent = sum(a.urgent for a in others)
+        fixes = sum(a.kind == "correction" for a in others)
+        inside = ([f"{urgent} URG"] if urgent else []) + \
+            ([f"{fixes} correction{'s' if fixes > 1 else ''}"] if fixes else [])
+        subject = (f"{len(alerts)} alerts{' incl. ' + ', '.join(inside) + ' below' if inside else ''}: "
+                   + subject)
 
     # The line Gmail shows after the subject in the inbox.
     if len(alerts) == 1:
@@ -146,16 +155,15 @@ def build_alerts(alerts: list) -> tuple:
         if latest.kind == "correction" and latest.replaces is not None:
             preview += f" · replaces the {latest.replaces.filed:%H:%M} alert"
     else:
-        preview = " | ".join(f"{a.filed:%H:%M} {stories.clean(a.text)[0]}" for a in reversed(alerts[:-1]))
+        preview = " | ".join(f"{a.filed:%H:%M} {stories.clean(a.text)[0]}" for a in alerts[1:])
     hidden = (f'<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
               f'{html.escape(preview)}{"&nbsp;&zwnj;" * 60}</div>')
 
     # Several new alerts on one story: its older alerts are listed once, under
-    # the first of them, rather than repeated under each.
-    cards, listed = [], set()
-    for a in alerts:
-        cards.append(_card(a, show_earlier=stories.key(a.slug) not in listed))
-        listed.add(stories.key(a.slug))
+    # the last card of that story (the oldest of the new ones), rather than
+    # repeated under each.
+    last_of_story = {stories.key(a.slug): a.id for a in alerts}
+    cards = [_card(a, show_earlier=last_of_story[stories.key(a.slug)] == a.id) for a in alerts]
 
     body = f"""{hidden}<div style="max-width:640px;margin:0 auto;padding:16px 12px;background:#fff;">
       {''.join(cards)}

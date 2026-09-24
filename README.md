@@ -30,8 +30,11 @@ What the desk sees:
   shows which alert it replaces, with the changed words highlighted.
 - **Older alerts on the same story**, greyed out underneath and labelled as
   not new, so they are not posted twice.
-- **Exact repeats are not sent.** An alert with word-for-word the same text as
-  one already filed on the same slug is left out.
+- **The later version stands.** An alert and its correction in the same
+  check: only the correction is sent. An exact repeat (identical text, same
+  or lower priority) is not sent. Any difference at all, even a comma or PRI
+  raised to URG, is sent.
+- **Newest first.** An email with several alerts lists the latest at the top.
 
 Nothing counts alerts ("2nd alert on this story"). PTI's numbering in slugs
 skips, repeats and drops numbers too often to state as fact. Alerts are

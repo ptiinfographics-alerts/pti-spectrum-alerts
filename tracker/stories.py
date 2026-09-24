@@ -4,8 +4,11 @@ PTI's own numbering ("EC-CJP 2") is not reliable enough to state as fact --
 numbers are skipped, repeated and dropped -- so nothing here counts alerts.
 It only groups alerts that carry the same slug, and compares their words:
 
-  repeat      the same words as an alert already filed on this slug.
-              Not sent: it tells the desk nothing, and invites a double post.
+  repeat      exactly the same text as an alert already filed on this slug,
+              at the same or lower priority. Not sent: it tells the desk
+              nothing, and invites a double post. Anything that differs at
+              all -- a comma, a quote mark, PRI raised to URG -- is sent,
+              because the later version is the one that stands.
   correction  marked "(CORRECTED)" / "Eds: corrects", or re-filed under the
               same item number with different words (PTI often fixes a typo
               or a name this way without saying so). Sent, clearly marked,
@@ -77,6 +80,10 @@ def clean(text: str) -> tuple:
     return body, notes, was_story
 
 
+def _exact(text: str) -> str:
+    return " ".join(clean(text)[0].split())
+
+
 def _words(text: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", clean(text)[0].lower()))
 
@@ -107,7 +114,8 @@ def relate(alert, prior: list) -> str:
     on the same story (with their text already read). Returns "repeat",
     "correction" or "new"."""
     prior = sorted(prior, key=order)
-    if any(_words(p.text) == _words(alert.text) for p in prior):
+    if any(_exact(p.text) == _exact(alert.text) and (p.urgent or not alert.urgent)
+           for p in prior):
         return "repeat"
     marked = is_marked_correction(alert)
     # PTI re-files a fixed alert under the SAME item number (SPF038 twice);
