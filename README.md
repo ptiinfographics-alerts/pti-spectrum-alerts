@@ -121,6 +121,10 @@ From the repository's **Actions** tab, open **PTI Alerts → Run workflow**:
   sends nothing.
 - **normal**: starts the loop, if it is not running already.
 
+To put a change live at once, rather than at the next six-hourly hand-over,
+run `tools/deploy.sh` on the Mac. It pushes the code, stops the running loop
+(which saves what it has sent first) and starts a fresh one.
+
 On a Mac, `tools/try_local.sh` does a dry run from this computer and shows
 the alerts themselves. The password is typed blind and is never stored.
 
