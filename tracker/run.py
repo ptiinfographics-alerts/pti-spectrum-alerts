@@ -305,7 +305,8 @@ class Tracker:
         log(f"! Spectrum could not be reached: {str(exc)[:160]}")
         if now - since >= DOWN_NOTICE_AFTER:
             notify_admin(self.state, "down", "Spectrum cannot be reached", [
-                f"Every check since {dt.datetime.fromtimestamp(since, IST):%H:%M IST, %d %b} "
+                f"Every check since {mailer.clock(dt.datetime.fromtimestamp(since, IST))} IST, "
+                f"{dt.datetime.fromtimestamp(since, IST):%d %b} "
                 "has failed, so <strong>no alerts are being sent</strong>. The tracker "
                 "keeps checking every minute and will pick up anything it missed from "
                 f"the last {MAX_AGE_HOURS} hours as soon as Spectrum answers again.",

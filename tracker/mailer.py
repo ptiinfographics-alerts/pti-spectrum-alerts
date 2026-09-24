@@ -67,9 +67,14 @@ def _tag(label: str, wash: str, ink: str) -> str:
             f'padding:3px 6px;border-radius:4px;margin-right:6px;">{label}</span>')
 
 
+def clock(when) -> str:
+    """5:38 PM -- the 12-hour clock, without a leading zero."""
+    return f"{when:%I:%M %p}".lstrip("0")
+
+
 def _where(alert) -> str:
     place = alert.dateline.title() if alert.dateline else ""
-    return f"{place + ' · ' if place else ''}{alert.filed:%H:%M} IST"
+    return f"{place + ' · ' if place else ''}{clock(alert.filed)} IST"
 
 
 def label(alert) -> str:
@@ -118,7 +123,7 @@ def _card(alert, show_earlier: bool = True) -> str:
           <div style="background:#F3F4F6;border-radius:6px;padding:10px 12px;margin-top:14px;
                       font:400 13px/1.5 {FONT};color:#374151;">
             <div style="font-size:12px;color:{GREY};margin-bottom:4px;">Earlier version ·
-              {old.filed:%H:%M} IST · <span style="{mono}">{html.escape(stories.readable(old.slug))}</span>{held} ·
+              {clock(old.filed)} IST · <span style="{mono}">{html.escape(stories.readable(old.slug))}</span>{held} ·
               differences highlighted</div>{words}
           </div>"""
         else:
@@ -130,7 +135,7 @@ def _card(alert, show_earlier: bool = True) -> str:
         # skipped number on the wire is plain to see.
         rows = "".join(
             f'<div style="padding:7px 0;border-top:1px solid #D1D5DB;">'
-            f'<span style="font-weight:600;font-variant-numeric:tabular-nums;">{e.filed:%H:%M}</span>'
+            f'<span style="font-weight:600;font-variant-numeric:tabular-nums;">{clock(e.filed)}</span>'
             f' &nbsp;<span style="{mono}">{html.escape(stories.readable(e.slug))}</span><br>'
             f'{html.escape(stories.clean(e.text)[0])}</div>'
             for e in sorted(alert.earlier, key=stories.order, reverse=True))
@@ -169,9 +174,9 @@ def build_alerts(alerts: list) -> tuple:
     if len(alerts) == 1:
         preview = _where(latest)
         if latest.replaces is not None:
-            preview += f" · earlier version {latest.replaces.filed:%H:%M}"
+            preview += f" · earlier version {clock(latest.replaces.filed)}"
     else:
-        preview = " | ".join(f"{a.filed:%H:%M} {stories.clean(a.text)[0]}" for a in alerts[1:])
+        preview = " | ".join(f"{clock(a.filed)} {stories.clean(a.text)[0]}" for a in alerts[1:])
     hidden = (f'<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
               f'{html.escape(preview)}{"&nbsp;&zwnj;" * 60}</div>')
 
