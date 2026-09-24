@@ -33,7 +33,8 @@ evidence; it does not say what anything means or what to do about it.
   words that differ are highlighted. "Not emailed" is added when the tracker
   held the earlier version back because both arrived in the same check.
 - **Earlier alerts, same slug**, in a grey box underneath, newest first, up
-  to ten. Each shows the time it was filed and its own item code (DEL060).
+  to ten. Each shows the time it was filed and its full slug with PTI's number
+  (DEL060 · RAHUL-PRESSER 2), so a repeated or skipped number is visible.
 - The alert's own slug sits on the top line, beside its time.
 - **The later version stands.** An alert and its re-file in the same check:
   only the later one is sent, with the earlier shown as above. An exact

@@ -94,12 +94,6 @@ def _short(text: str, limit: int = SUBJECT_CHARS) -> str:
     return cut.rstrip(" ,;:-\u2013\u2014") + "\u2026"
 
 
-def _item(slug: str) -> str:
-    """DEL060 -- the item code alone, for the list of earlier alerts."""
-    code, number = stories.desk(slug)
-    return f"{code}{number:03d}" if code else ""
-
-
 def _card(alert, show_earlier: bool = True) -> str:
     kind = label(alert)
     tags = (_tag("URG", RED_WASH, RED_INK) if alert.urgent else "") + \
@@ -131,11 +125,13 @@ def _card(alert, show_earlier: bool = True) -> str:
             extra += f'<div style="{small}">Earlier version not found on today\'s wire.</div>'
 
     if alert.earlier and show_earlier:
-        # Newest first, like the email itself; each row its own item code.
+        # Newest first, like the email itself. Each row shows its full slug
+        # with PTI's number (DEL062 · RAHUL-PRESSER 4), so a repeated or
+        # skipped number on the wire is plain to see.
         rows = "".join(
             f'<div style="padding:7px 0;border-top:1px solid #D1D5DB;">'
             f'<span style="font-weight:600;font-variant-numeric:tabular-nums;">{e.filed:%H:%M}</span>'
-            f' &nbsp;<span style="{mono}">{html.escape(_item(e.slug))}</span><br>'
+            f' &nbsp;<span style="{mono}">{html.escape(stories.readable(e.slug))}</span><br>'
             f'{html.escape(stories.clean(e.text)[0])}</div>'
             for e in sorted(alert.earlier, key=stories.order, reverse=True))
         extra += f"""
