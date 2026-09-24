@@ -77,6 +77,18 @@ def _where(alert) -> str:
     return f"{place + ' · ' if place else ''}{clock(alert.filed)} IST"
 
 
+# Gmail turns a place name followed by a number ("Palghar · 6:06") into a
+# Google Maps link, and some mail apps link times and item codes too. An
+# invisible zero-width space after each separator and colon breaks up what
+# they look for; the line still reads the same.
+_BREAK = "&#8203;"
+
+
+def _unlinked(text: str) -> str:
+    """HTML for a line of places, times and slugs that mail apps leave alone."""
+    return html.escape(text).replace(":", ":" + _BREAK).replace(" · ", _BREAK + " · " + _BREAK)
+
+
 def label(alert) -> str:
     """What happened on the wire, in PTI's terms. "CORRECTED" only when PTI
     itself marked it so; "RE-FILED" when the same item number was filed
@@ -123,7 +135,7 @@ def _card(alert, show_earlier: bool = True) -> str:
           <div style="background:#F3F4F6;border-radius:6px;padding:10px 12px;margin-top:14px;
                       font:400 13px/1.5 {FONT};color:#374151;">
             <div style="font-size:12px;color:{GREY};margin-bottom:4px;">Earlier version ·
-              {clock(old.filed)} IST · <span style="{mono}">{html.escape(stories.readable(old.slug))}</span>{held} ·
+              {_unlinked(clock(old.filed) + " IST")} · <span style="{mono}">{_unlinked(stories.readable(old.slug))}</span>{held} ·
               differences highlighted</div>{words}
           </div>"""
         else:
@@ -135,8 +147,8 @@ def _card(alert, show_earlier: bool = True) -> str:
         # skipped number on the wire is plain to see.
         rows = "".join(
             f'<div style="padding:7px 0;border-top:1px solid #D1D5DB;">'
-            f'<span style="font-weight:600;font-variant-numeric:tabular-nums;">{clock(e.filed)}</span>'
-            f' &nbsp;<span style="{mono}">{html.escape(stories.readable(e.slug))}</span><br>'
+            f'<span style="font-weight:600;font-variant-numeric:tabular-nums;">{_unlinked(clock(e.filed))}</span>'
+            f' &nbsp;<span style="{mono}">{_unlinked(stories.readable(e.slug))}</span><br>'
             f'{html.escape(stories.clean(e.text)[0])}</div>'
             for e in sorted(alert.earlier, key=stories.order, reverse=True))
         extra += f"""
@@ -147,8 +159,8 @@ def _card(alert, show_earlier: bool = True) -> str:
 
     return f"""
         <div style="border-left:3px solid {rule};padding:12px 14px;margin-bottom:18px;background:#fff;">
-          <div style="font:400 12px/1.6 {FONT};color:{GREY};margin-bottom:8px;">{tags}{html.escape(_where(alert))}
-            · <span style="{mono}">{html.escape(stories.readable(alert.slug))}</span></div>
+          <div style="font:400 12px/1.6 {FONT};color:{GREY};margin-bottom:8px;">{tags}{_unlinked(_where(alert))}
+            {_BREAK}· {_BREAK}<span style="{mono}">{_unlinked(stories.readable(alert.slug))}</span></div>
           <div style="font:600 17px/1.45 {FONT};color:#111827;">{html.escape("News Alert! " + copy)}</div>{extra}
         </div>"""
 
