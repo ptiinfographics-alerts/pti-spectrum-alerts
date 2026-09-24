@@ -16,25 +16,30 @@ Every one of them is sent, and nothing else is. That is 60 to 80 a day. Each
 check that finds something sends **one** email with everything new, in the
 order PTI filed it.
 
-What the desk sees:
+What the desk sees. The email states what is on the wire and shows the
+evidence; it does not say what anything means or what to do about it.
 
 - **The copy line.** Each alert reads `News Alert! <the alert's words>` and
   nothing else, ready to paste. PTI's editors' notes, such as
-  "(Eds: CORRECTS TEAM)", are taken out of it and shown underneath.
-- **`[URG]`** in the subject and a red tag in the email, when PTI filed the
-  alert as urgent (`$URG` on the wire rather than `$PRI`). That is PTI's own
-  priority, not the tracker's judgement.
-- **`[CORRECTION]`** when PTI corrects an alert. That is either marked
-  `(CORRECTED)`, or the same item re-filed under the same number with
-  different words, which is how PTI often fixes a typo or a name. The email
-  shows which alert it replaces, with the changed words highlighted.
-- **Older alerts on the same story**, greyed out underneath and labelled as
-  not new, so they are not posted twice.
-- **The later version stands.** An alert and its correction in the same
-  check: only the correction is sent. An exact repeat (identical text, same
-  or lower priority) is not sent. Any difference at all, even a comma or PRI
-  raised to URG, is sent.
+  "(Eds: CORRECTS TEAM)", are shown verbatim underneath.
+- **`URG`** when PTI filed the alert as urgent (`$URG` on the wire rather
+  than `$PRI`). PTI's own priority, not the tracker's judgement.
+- **`CORRECTED`** when PTI itself marked the alert `(CORRECTED)` or
+  "Eds: corrects".
+- **`RE-FILED`** when the same item number was filed again with different
+  words, which is how PTI often fixes a typo or a name without marking it.
+- For both, the **earlier version** is shown with its time and slug, and the
+  words that differ are highlighted. "Not emailed" is added when the tracker
+  held the earlier version back because both arrived in the same check.
+- **Earlier alerts, same slug**, greyed out underneath, each with the time it
+  was filed.
+- **The later version stands.** An alert and its re-file in the same check:
+  only the later one is sent, with the earlier shown as above. An exact
+  repeat (identical text, same or lower priority) is not sent. Any
+  difference at all, even a comma or PRI raised to URG, is sent.
 - **Newest first.** An email with several alerts lists the latest at the top.
+- Tags in the subject belong to the headline they sit next to. Tagged alerts
+  further down are counted: "3 alerts incl. 1 re-filed below: ...".
 
 Nothing counts alerts ("2nd alert on this story"). PTI's numbering in slugs
 skips, repeats and drops numbers too often to state as fact. Alerts are

@@ -72,42 +72,43 @@ def _where(alert) -> str:
     return f"{place + ' · ' if place else ''}{alert.filed:%H:%M} IST"
 
 
+def label(alert) -> str:
+    """What happened on the wire, in PTI's terms. "CORRECTED" only when PTI
+    itself marked it so; "RE-FILED" when the same item number was filed
+    again with different words. Neither says which version is right."""
+    if alert.kind != "correction":
+        return ""
+    return "CORRECTED" if stories.is_marked_correction(alert) else "RE-FILED"
+
+
 def _card(alert, show_earlier: bool = True) -> str:
-    correction = alert.kind == "correction"
+    kind = label(alert)
     tags = (_tag("URG", RED_WASH, RED_INK) if alert.urgent else "") + \
-        (_tag("CORRECTION", AMBER_WASH, AMBER_INK) if correction else "")
+        (_tag(kind, AMBER_WASH, AMBER_INK) if kind else "")
     copy, notes, was_story = stories.clean(alert.text)
-    rule = AMBER if correction else (RED if alert.urgent else NAVY)
+    rule = AMBER if kind else (RED if alert.urgent else NAVY)
+    small = f"font:400 12px/1.5 {FONT};color:{GREY};margin-top:6px;"
 
-    extra = ""
-    if notes:
-        extra += (f'<div style="font:400 12px/1.5 {FONT};color:{AMBER_INK};margin-top:6px;">'
-                  f'PTI editor\'s note: {html.escape("; ".join(notes))}</div>')
+    extra = "".join(f'<div style="{small}">(Eds: {html.escape(n)})</div>' for n in notes)
     if was_story:
-        extra += (f'<div style="font:400 12px/1.5 {FONT};color:{GREY};margin-top:6px;">'
-                  f'Filed as a full story under an alert slug: only its headline is shown.</div>')
+        extra += f'<div style="{small}">Headline only. Filed on the wire as a full story.</div>'
 
-    if correction:
+    if kind:
         old = alert.replaces
         if old is not None:
-            marked = " ".join(
-                f'<span style="background:#F7C1C1;color:{RED_INK};">{html.escape(w)}</span>'
-                if changed else html.escape(w)
+            words = " ".join(
+                f'<span style="background:#FFE08A;">{html.escape(w)}</span>' if changed else html.escape(w)
                 for w, changed in stories.changed_words(old.text, alert.text))
-            said = "PTI corrected" if stories.is_marked_correction(alert) else "PTI re-filed with changes"
+            held = " · not emailed" if old.held else ""
             extra += f"""
-          <div style="background:{AMBER_WASH};border-radius:6px;padding:10px 12px;margin-top:12px;
-                      font:400 13px/1.5 {FONT};color:{AMBER_INK};">
-            <strong>{said}: this replaces the {old.filed:%H:%M} alert.</strong>
-            If the earlier version was posted, it needs fixing. What changed is highlighted:
-            <div style="color:{GREY};margin-top:6px;text-decoration:line-through;">{marked}</div>
+          <div style="background:#F6F7F9;border-radius:6px;padding:10px 12px;margin-top:12px;
+                      font:400 13px/1.5 {FONT};color:#374151;">
+            <div style="font-size:12px;color:{GREY};margin-bottom:4px;">Earlier version ·
+              {old.filed:%H:%M} IST · {html.escape(stories.readable(old.slug))}{held} ·
+              differences highlighted</div>{words}
           </div>"""
         else:
-            extra += f"""
-          <div style="background:{AMBER_WASH};border-radius:6px;padding:10px 12px;margin-top:12px;
-                      font:400 13px/1.5 {FONT};color:{AMBER_INK};">
-            <strong>PTI marked this as a correction.</strong> The alert it corrects
-            could not be found today; check the wire.</div>"""
+            extra += f'<div style="{small}">Earlier version not found on today\'s wire.</div>'
 
     if alert.earlier and show_earlier:
         rows = "".join(
@@ -117,8 +118,7 @@ def _card(alert, show_earlier: bool = True) -> str:
         extra += f"""
           <div style="border-top:1px dashed #d1d5db;margin-top:12px;padding-top:8px;
                       font:400 12px/1.5 {FONT};color:#9ca3af;">
-            <div style="font-weight:600;letter-spacing:.04em;">OLDER ALERTS ON THIS STORY:
-              NOT NEW, ALREADY ON THE WIRE</div>{rows}
+            <div style="font-weight:600;letter-spacing:.04em;">EARLIER ALERTS, SAME SLUG</div>{rows}
           </div>"""
 
     return f"""
@@ -131,37 +131,34 @@ def _card(alert, show_earlier: bool = True) -> str:
 
 
 def build_alerts(alerts: list) -> tuple:
-    """One email for everything new in a check, newest first, as the wire
-    reads: a later alert is the one that stands."""
+    """One email for everything new in a check, newest first, as the wire reads."""
     alerts = sorted(alerts, key=stories.order, reverse=True)
     latest = alerts[0]
     lead = stories.clean(latest.text)[0] or latest.slug
     # Tags in front describe the headline they sit next to, never another
-    # alert: an urgent alert or a correction elsewhere in the email is counted.
-    marks = [m for m, on in (("URG", latest.urgent), ("CORRECTION", latest.kind == "correction")) if on]
+    # alert; what is further down the email is counted instead.
+    marks = [m for m in (("URG" if latest.urgent else ""), label(latest)) if m]
     subject = (f"[{' · '.join(marks)}] " if marks else "") + lead
     if len(alerts) > 1:
         others = alerts[1:]
-        urgent = sum(a.urgent for a in others)
-        fixes = sum(a.kind == "correction" for a in others)
-        inside = ([f"{urgent} URG"] if urgent else []) + \
-            ([f"{fixes} correction{'s' if fixes > 1 else ''}"] if fixes else [])
+        counts = [(sum(a.urgent for a in others), "URG")] + \
+            [(sum(label(a) == k for a in others), k.lower()) for k in ("CORRECTED", "RE-FILED")]
+        inside = [f"{n} {name}" for n, name in counts if n]
         subject = (f"{len(alerts)} alerts{' incl. ' + ', '.join(inside) + ' below' if inside else ''}: "
                    + subject)
 
     # The line Gmail shows after the subject in the inbox.
     if len(alerts) == 1:
         preview = _where(latest)
-        if latest.kind == "correction" and latest.replaces is not None:
-            preview += f" · replaces the {latest.replaces.filed:%H:%M} alert"
+        if latest.replaces is not None:
+            preview += f" · earlier version {latest.replaces.filed:%H:%M}"
     else:
         preview = " | ".join(f"{a.filed:%H:%M} {stories.clean(a.text)[0]}" for a in alerts[1:])
     hidden = (f'<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
               f'{html.escape(preview)}{"&nbsp;&zwnj;" * 60}</div>')
 
-    # Several new alerts on one story: its older alerts are listed once, under
-    # the last card of that story (the oldest of the new ones), rather than
-    # repeated under each.
+    # Several new alerts on one story: its earlier alerts are listed once,
+    # under the last card of that story (the oldest of the new ones).
     last_of_story = {stories.key(a.slug): a.id for a in alerts}
     cards = [_card(a, show_earlier=last_of_story[stories.key(a.slug)] == a.id) for a in alerts]
 

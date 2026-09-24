@@ -247,6 +247,7 @@ class Tracker:
                 continue
             if alert.replaces is not None and alert.replaces.id in batch:
                 superseded.add(alert.replaces.id)
+                alert.replaces.held = True     # shown as "not emailed"
             keep.append(alert)
         for alert in keep:
             if alert.id in superseded:

@@ -64,6 +64,7 @@ class Alert:
     replaces: "Alert | None" = None
     earlier: list = dataclasses.field(default_factory=list)
     kind: str = "new"    # new, correction or repeat
+    held: bool = False   # not emailed: a re-file arrived in the same check
 
     @property
     def urgent(self) -> bool:
