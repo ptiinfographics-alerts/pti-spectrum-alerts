@@ -39,7 +39,7 @@ SIGN_IN_EVERY = 60 * 60        # a fresh session every hour
 SIGN_IN_RETRY = 5 * 60         # after a refused login: slow, not every minute
 MAX_AGE_HOURS = 3              # after an outage, older alerts are not sent late
 REMEMBER_DAYS = 4
-SAVE_EVERY = 10 * 60           # how often progress is pushed to GitHub
+SAVE_EVERY = 10 * 60           # how often other progress is pushed to GitHub
 
 # Gmail allows about 500 recipients a day. Each email counts once per person.
 DAILY_LIMIT = 500
@@ -125,6 +125,7 @@ class Tracker:
         self.last_sign_in_try = 0.0
         self.last_saved = time.time()
         self.dirty = False
+        self.sent_unsaved = False
 
     def ensure_signed_in(self) -> bool:
         now = time.time()
@@ -282,6 +283,9 @@ class Tracker:
         for a in alerts:
             self.state["seen"][a.id] = int(now)
         self.dirty = True
+        # Saved straight away, not on the ten-minute cycle: if this run is
+        # stopped or crashes, the next one must know these went out.
+        self.sent_unsaved = True
         lag = max((dt.datetime.now(dt.timezone.utc) - a.filed).total_seconds() / 60 for a in alerts)
         log(f"  emailed {len(alerts)} alert(s) to {n} recipient(s); oldest was filed {lag:.0f} min ago")
         if recipients_today(self.state, now) > BATCH_ABOVE and not self.state.get("warned_budget"):
@@ -328,8 +332,9 @@ class Tracker:
             return
         self.tidy()
         save_state(self.state)
-        if self.dirty and (force or time.time() - self.last_saved >= SAVE_EVERY):
-            push_state("final" if force else "periodic")
+        if self.dirty and (force or self.sent_unsaved or time.time() - self.last_saved >= SAVE_EVERY):
+            push_state("final" if force else "after sending" if self.sent_unsaved else "periodic")
+            self.sent_unsaved = False
             self.last_saved = time.time()
             self.dirty = False
 

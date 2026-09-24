@@ -63,8 +63,11 @@ jobs:
         run: |
           git config user.name "pti-alerts"
           git config user.email "actions@users.noreply.github.com"
+          # exec: Python replaces the shell, so when a run is cancelled the
+          # stop signal reaches it directly and it saves before exiting.
+          # (Without exec the shell gets the signal and Python is killed.)
           case "${{ inputs.mode || 'normal' }}" in
-            test-email) python -m tracker.run --test-email ;;
-            dry-run)    python -m tracker.run --dry-run ;;
-            *)          python -m tracker.run --loop 340 ;;
+            test-email) exec python -m tracker.run --test-email ;;
+            dry-run)    exec python -m tracker.run --dry-run ;;
+            *)          exec python -m tracker.run --loop 340 ;;
           esac
