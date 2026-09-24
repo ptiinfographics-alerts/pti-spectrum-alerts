@@ -163,8 +163,43 @@ class Spectrum:
         alert.text, alert.dateline = self._texts[alert.id]
 
 
+# When in doubt, the text is kept. A stray "PTI GK" at the end costs the desk
+# a second to delete; a word cut from the alert may never be noticed. So
+# each rule below removes something only where it cannot be the alert.
+
+# A line holding only the sign-off or desk initials: "PTI GMS SSK", "GK".
+_SIGN_OFF_LINE = re.compile(r"(PTI\s+)?[A-Z]{1,5}(\s+[A-Z]{1,5})*")
+# Where a sentence has plainly ended.
+_CLOSED = re.compile(r"[.!?'\"\u2019\u201d)]$")
+# The sign-off at the very end of the last line, straight after the
+# sentence has ended: "... Adani. PTI BSM", "... reports AP. PTI",
+# "... early trade. PTI DRR." Because it must follow closing punctuation,
+# "... Minister told PTI" or "... to PTI." at the end of an alert is left
+# alone -- there a word, not a full stop, comes before PTI.
+_SIGN_OFF_END = re.compile(r"(?<=[.!?'\"\u2019\u201d)])\s+PTI(\s+[A-Z]{1,5})*\.?\s*$")
+
+
+def _finished(line: str) -> bool:
+    """Has the text plainly ended by the end of this line?"""
+    return bool(_CLOSED.search(line) or _SIGN_OFF_END.search(line)
+                or re.fullmatch(r"PTI(\s+[A-Z]{1,5})*\.?", line))
+
+
 def parse_message(message: str, slug: str = "") -> tuple:
-    """(text, dateline) from one raw wire message."""
+    """(text, dateline) from one raw wire message.
+
+    Every alert message has the same shape, and the text is found by that
+    shape, not by looking for the word PTI inside it:
+
+        ZCZC
+        URG GEN NAT                    priority and category
+        .KOLKATA CAL12                 dateline
+        NEWSALERT-WB-...               slug
+        <the alert>. PTI BSM           text, usually ending in the sign-off
+        ACD                            desk initials (sometimes PTI XX alone)
+        09241213                       time filed
+        NNNN                           end of message
+    """
     lines = [line.strip() for line in message.replace("\r", "\n").split("\n")]
     lines = [line for line in lines if line]
     dateline = ""
@@ -172,8 +207,10 @@ def parse_message(message: str, slug: str = "") -> tuple:
     slug_tail = slug.split("-", 1)[-1].strip().upper() if slug else ""
     for line in lines:
         upper = line.upper()
-        if upper in ("ZCZC", "NNNN") or re.fullmatch(r"\d{8}", line):
+        if upper == "ZCZC":
             continue
+        if upper == "NNNN":
+            break
         if re.fullmatch(r"(URG|PRI|FLS|BLN)\b.*", line) and not body:
             continue                                   # priority / category header
         if line.startswith(".") and not body:
@@ -182,9 +219,19 @@ def parse_message(message: str, slug: str = "") -> tuple:
         if not body and (MARKER in upper or (slug_tail and upper == slug_tail)):
             continue                                   # the slug again
         body.append(line)
-    text = " ".join(body)
-    # The sign-off: "... says official. PTI ZA" then the desk's initials.
-    text = re.sub(r"\s*\bPTI\s+[A-Z]{1,5}\b(?!.*\bPTI\b).*$", "", text).strip()
+    # The time filed: an 8-digit line, only when it is the last before NNNN.
+    if len(body) > 1 and re.fullmatch(r"\d{8}", body[-1]):
+        body.pop()
+    # Initials and sign-off lines ("RD", "PTI GMS SSK") after the last line
+    # of text -- dropped only if that line has plainly ended. A short
+    # capitalised line after an unfinished one could be the end of the
+    # alert itself ("... refers the matter to" / "CBI"), so it stays.
+    last = max((i for i, line in enumerate(body) if not _SIGN_OFF_LINE.fullmatch(line)), default=0)
+    if body and _finished(body[last]):
+        del body[last + 1:]
+    if body:
+        body[-1] = _SIGN_OFF_END.sub("", body[-1]).rstrip()
+    text = " ".join(" ".join(body).split())
     return text, DATELINES.get(dateline.upper(), dateline.upper())
 
 
