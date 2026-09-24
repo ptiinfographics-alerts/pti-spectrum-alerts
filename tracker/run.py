@@ -78,7 +78,9 @@ def push_state(reason: str) -> None:
             return
         subprocess.run(["git", "commit", "--quiet", "-m", f"seen up to {dt.datetime.now(dt.timezone.utc):%FT%TZ}"],
                        check=True, cwd=ROOT)
-        # Only this run ever writes; a failed push is simply tried again later.
+        # Only this run writes state.json, but code changes can land on main
+        # while it runs; take them first so the push is never refused.
+        subprocess.run(["git", "pull", "--rebase", "--quiet"], check=True, cwd=ROOT, timeout=60)
         subprocess.run(["git", "push", "--quiet"], check=True, cwd=ROOT, timeout=60)
         log(f"progress saved ({reason})")
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
