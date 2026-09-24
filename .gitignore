@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+# The sign-in probe saves real Spectrum pages here. Never commit them.
+probe_output/

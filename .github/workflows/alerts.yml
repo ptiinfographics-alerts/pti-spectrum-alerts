@@ -1,0 +1,70 @@
+name: PTI Alerts
+
+# One long run at a time, checking Spectrum every minute for just under six
+# hours (GitHub's limit for one job). A minute into each run it queues the
+# next one, which waits behind it and starts the moment it ends -- so there
+# is always exactly one run working and one waiting. keepalive.yml restarts
+# the chain if it ever breaks.
+#
+# Public repository on purpose: GitHub gives public repositories unlimited
+# free minutes. Nothing from the wire is printed in these logs or saved in
+# the repository -- only counts, times and Spectrum's story ids.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "What should this run do?"
+        type: choice
+        default: normal
+        options:
+          - normal
+          - test-email
+          - dry-run
+
+# The long runs queue behind each other. A test email or dry run gets a
+# group of its own, or it would wait up to six hours behind the loop.
+concurrency:
+  group: ${{ (inputs.mode || 'normal') == 'normal' && 'pti-alerts' || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write     # to save state.json
+  actions: write      # to queue the next run
+
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    # Longer than the loop below, so the program always ends first and saves
+    # what it has. GitHub killing the job is the case where progress is lost.
+    timeout-minutes: 355
+    steps:
+      # The latest main, not the commit from when this run was queued: the
+      # run before it saved its progress while this one was waiting.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Watch Spectrum for alerts
+        env:
+          SPECTRUM_USER: ${{ secrets.SPECTRUM_USER }}
+          SPECTRUM_PASSWORD: ${{ secrets.SPECTRUM_PASSWORD }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          ADMIN_MAIL_TO: ${{ secrets.ADMIN_MAIL_TO }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "pti-alerts"
+          git config user.email "actions@users.noreply.github.com"
+          case "${{ inputs.mode || 'normal' }}" in
+            test-email) python -m tracker.run --test-email ;;
+            dry-run)    python -m tracker.run --dry-run ;;
+            *)          python -m tracker.run --loop 340 ;;
+          esac

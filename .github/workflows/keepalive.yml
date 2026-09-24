@@ -1,0 +1,31 @@
+name: Keepalive
+
+# Every ten minutes (GitHub's scheduler is often late, sometimes by much
+# more): is a PTI Alerts run working or waiting? If not, the chain of runs
+# has broken -- a run crashed before it could queue the next -- so start one.
+# When everything is healthy this does nothing but look.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Restart the alerts loop if nothing is running
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          active=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow alerts.yml --limit 20 \
+                     --json status --jq '[.[] | select(.status != "completed")] | length')
+          if [ "$active" -gt 0 ]; then
+            echo "Healthy: $active alerts run(s) working or waiting."
+          else
+            echo "No alerts run working or waiting -- starting one."
+            gh workflow run alerts.yml --repo "$GITHUB_REPOSITORY" --ref main
+          fi
