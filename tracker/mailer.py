@@ -6,6 +6,8 @@ import smtplib
 from email.message import EmailMessage
 from email.utils import formataddr
 
+from . import stories
+
 SENDER_ENV = "GMAIL_USER"
 PASSWORD_ENV = "GMAIL_APP_PASSWORD"
 RECIPIENT_ENV = "MAIL_TO"
@@ -54,44 +56,109 @@ def send(subject: str, body_html: str, env: str = RECIPIENT_ENV, name: str = ALE
     return len(to)
 
 
+NAVY = "#0C447C"
+RED, RED_WASH, RED_INK = "#C62828", "#FCEBEB", "#791F1F"
+AMBER, AMBER_WASH, AMBER_INK = "#B26A00", "#FFF4DF", "#633806"
+GREY = "#6b7280"
+
+
+def _tag(label: str, wash: str, ink: str) -> str:
+    return (f'<span style="background:{wash};color:{ink};font:600 11px/1 {FONT};'
+            f'padding:3px 6px;border-radius:4px;margin-right:6px;">{label}</span>')
+
+
+def _where(alert) -> str:
+    place = alert.dateline.title() if alert.dateline else ""
+    return f"{place + ' · ' if place else ''}{alert.filed:%H:%M} IST"
+
+
+def _card(alert, show_earlier: bool = True) -> str:
+    correction = alert.kind == "correction"
+    tags = (_tag("URG", RED_WASH, RED_INK) if alert.urgent else "") + \
+        (_tag("CORRECTION", AMBER_WASH, AMBER_INK) if correction else "")
+    copy, notes, was_story = stories.clean(alert.text)
+    rule = AMBER if correction else (RED if alert.urgent else NAVY)
+
+    extra = ""
+    if notes:
+        extra += (f'<div style="font:400 12px/1.5 {FONT};color:{AMBER_INK};margin-top:6px;">'
+                  f'PTI editor\'s note: {html.escape("; ".join(notes))}</div>')
+    if was_story:
+        extra += (f'<div style="font:400 12px/1.5 {FONT};color:{GREY};margin-top:6px;">'
+                  f'Filed as a full story under an alert slug: only its headline is shown.</div>')
+
+    if correction:
+        old = alert.replaces
+        if old is not None:
+            marked = " ".join(
+                f'<span style="background:#F7C1C1;color:{RED_INK};">{html.escape(w)}</span>'
+                if changed else html.escape(w)
+                for w, changed in stories.changed_words(old.text, alert.text))
+            said = "PTI corrected" if stories.is_marked_correction(alert) else "PTI re-filed with changes"
+            extra += f"""
+          <div style="background:{AMBER_WASH};border-radius:6px;padding:10px 12px;margin-top:12px;
+                      font:400 13px/1.5 {FONT};color:{AMBER_INK};">
+            <strong>{said}: this replaces the {old.filed:%H:%M} alert.</strong>
+            If the earlier version was posted, it needs fixing. What changed is highlighted:
+            <div style="color:{GREY};margin-top:6px;text-decoration:line-through;">{marked}</div>
+          </div>"""
+        else:
+            extra += f"""
+          <div style="background:{AMBER_WASH};border-radius:6px;padding:10px 12px;margin-top:12px;
+                      font:400 13px/1.5 {FONT};color:{AMBER_INK};">
+            <strong>PTI marked this as a correction.</strong> The alert it corrects
+            could not be found today; check the wire.</div>"""
+
+    if alert.earlier and show_earlier:
+        rows = "".join(
+            f'<div style="margin-top:4px;"><span style="font-variant-numeric:tabular-nums;">'
+            f'{e.filed:%H:%M}</span> &nbsp;{html.escape(stories.clean(e.text)[0])}</div>'
+            for e in alert.earlier)
+        extra += f"""
+          <div style="border-top:1px dashed #d1d5db;margin-top:12px;padding-top:8px;
+                      font:400 12px/1.5 {FONT};color:#9ca3af;">
+            <div style="font-weight:600;letter-spacing:.04em;">OLDER ALERTS ON THIS STORY:
+              NOT NEW, ALREADY ON THE WIRE</div>{rows}
+          </div>"""
+
+    return f"""
+        <div style="border-left:3px solid {rule};padding:12px 14px;margin-bottom:14px;background:#fff;">
+          <div style="font:400 12px/1.4 {FONT};color:{GREY};margin-bottom:8px;">{tags}{html.escape(_where(alert))}</div>
+          <div style="font:600 17px/1.45 {FONT};color:#111827;">{html.escape("News Alert! " + copy)}</div>{extra}
+          <div style="font:400 11px/1.4 ui-monospace,Menlo,monospace;color:#9ca3af;margin-top:10px;">
+            {html.escape(stories.readable(alert.slug))}</div>
+        </div>"""
+
+
 def build_alerts(alerts: list) -> tuple:
-    """One email for everything new in a scan, in the order PTI filed it,
-    so follow-up alerts on the same story read in sequence."""
-    alerts = sorted(alerts, key=lambda a: (a.filed, a.slug))
+    """One email for everything new in a check, in the order PTI filed it."""
+    alerts = sorted(alerts, key=stories.order)
     latest = alerts[-1]
-    lead = latest.text or latest.slug
-    urgent = any(a.urgent for a in alerts)
-    subject = lead if len(alerts) == 1 else f"{len(alerts)} alerts: {lead}"
-    if urgent:
-        subject = "URGENT: " + subject
+    lead = stories.clean(latest.text)[0] or latest.slug
+    marks = ("URG" if any(a.urgent for a in alerts) else "",
+             "CORRECTION" if any(a.kind == "correction" for a in alerts) else "")
+    prefix = f"[{' · '.join(m for m in marks if m)}] " if any(marks) else ""
+    subject = prefix + (lead if len(alerts) == 1 else f"{len(alerts)} alerts: {lead}")
 
-    cards = []
+    # The line Gmail shows after the subject in the inbox.
+    if len(alerts) == 1:
+        preview = _where(latest)
+        if latest.kind == "correction" and latest.replaces is not None:
+            preview += f" · replaces the {latest.replaces.filed:%H:%M} alert"
+    else:
+        preview = " | ".join(f"{a.filed:%H:%M} {stories.clean(a.text)[0]}" for a in reversed(alerts[:-1]))
+    hidden = (f'<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
+              f'{html.escape(preview)}{"&nbsp;&zwnj;" * 60}</div>')
+
+    # Several new alerts on one story: its older alerts are listed once, under
+    # the first of them, rather than repeated under each.
+    cards, listed = [], set()
     for a in alerts:
-        badge = (f'<span style="background:#b91c1c;color:#fff;font:700 10px/1 {FONT};'
-                 f'letter-spacing:.08em;padding:4px 7px;border-radius:3px;margin-right:8px;">URGENT</span>'
-                 if a.urgent else "")
-        where = f"{html.escape(a.dateline)} &middot; " if a.dateline else ""
-        cards.append(f"""
-        <div style="border:1px solid #e5e7eb;border-left:4px solid {'#b91c1c' if a.urgent else '#1d4ed8'};
-                    border-radius:6px;padding:14px 16px;margin-bottom:12px;">
-          <div style="margin-bottom:8px;font:400 12px/1.4 {FONT};color:#6b7280;">
-            {badge}{where}{a.filed:%H:%M} IST, {a.filed:%d %b}
-          </div>
-          <div style="font:600 17px/1.4 {FONT};color:#111827;">{html.escape(a.text or a.slug)}</div>
-          <div style="font:400 11px/1.4 ui-monospace,Menlo,monospace;color:#9ca3af;margin-top:8px;">
-            {html.escape(a.slug)}</div>
-        </div>""")
+        cards.append(_card(a, show_earlier=stories.key(a.slug) not in listed))
+        listed.add(stories.key(a.slug))
 
-    body = f"""<div style="max-width:640px;margin:0 auto;padding:20px 16px;background:#fff;">
-      <div style="font:600 11px/1 {FONT};letter-spacing:.12em;color:#6b7280;
-                  text-transform:uppercase;margin-bottom:14px;">PTI news alerts</div>
+    body = f"""{hidden}<div style="max-width:640px;margin:0 auto;padding:16px 12px;background:#fff;">
       {''.join(cards)}
-      <div style="color:#9ca3af;font:400 12px/1.5 {FONT};margin-top:16px;
-                  border-top:1px solid #e5e7eb;padding-top:10px;">
-        Every NEWSALERT filed on the PTI wire, as it appears on
-        <a href="https://editorial.pti.in/spectrum/Login.aspx" style="color:#6b7280;">Spectrum</a>.
-        The full story follows on the wire.
-      </div>
     </div>"""
     return subject[:180], body
 

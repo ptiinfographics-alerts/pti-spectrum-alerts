@@ -14,8 +14,31 @@ PTI files its alerts, the one-line flashes that run ahead of a story, with
 
 Every one of them is sent, and nothing else is. That is 60 to 80 a day. Each
 check that finds something sends **one** email with everything new, in the
-order PTI filed it. Urgent (`URG`) alerts are marked in red, and their
-emails' subjects start with URGENT.
+order PTI filed it.
+
+What the desk sees:
+
+- **The copy line.** Each alert reads `News Alert! <the alert's words>` and
+  nothing else, ready to paste. PTI's editors' notes, such as
+  "(Eds: CORRECTS TEAM)", are taken out of it and shown underneath.
+- **`[URG]`** in the subject and a red tag in the email, when PTI filed the
+  alert as urgent (`$URG` on the wire rather than `$PRI`). That is PTI's own
+  priority, not the tracker's judgement.
+- **`[CORRECTION]`** when PTI corrects an alert. That is either marked
+  `(CORRECTED)`, or the same item re-filed under the same number with
+  different words, which is how PTI often fixes a typo or a name. The email
+  shows which alert it replaces, with the changed words highlighted.
+- **Older alerts on the same story**, greyed out underneath and labelled as
+  not new, so they are not posted twice.
+- **Exact repeats are not sent.** An alert with word-for-word the same text as
+  one already filed on the same slug is left out.
+
+Nothing counts alerts ("2nd alert on this story"). PTI's numbering in slugs
+skips, repeats and drops numbers too often to state as fact. Alerts are
+grouped only by matching slugs (`stories.py`).
+
+The sender's picture in Gmail is the profile photo of the sending Google
+account. `assets/profile-photo.png` is the navy bell used for it.
 
 ## How it runs
 
@@ -98,6 +121,7 @@ the alerts themselves. The password is typed blind and is never stored.
 | File | What it does |
 |---|---|
 | `tracker/spectrum.py` | Signs in to Spectrum and reads alerts |
+| `tracker/stories.py` | Groups alerts by slug and spots corrections and repeats |
 | `tracker/mailer.py` | Builds and sends the email |
 | `tracker/run.py` | The loop: checks, remembers, sends, reports problems |
 | `.github/workflows/alerts.yml` | Runs the loop on GitHub |

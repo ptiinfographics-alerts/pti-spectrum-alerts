@@ -19,13 +19,14 @@ import datetime as dt
 import json
 import os
 import pathlib
+import signal
 import subprocess
 import sys
 import time
 
 import requests
 
-from . import mailer, spectrum
+from . import mailer, spectrum, stories
 from .spectrum import IST
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -209,11 +210,48 @@ class Tracker:
                 log(f"  ! could not read one alert ({str(exc)[:100]}); next check will retry")
         if not ready:
             return
+        ready = self.relate(ready, found)
+        if not ready:
+            return
         log(f"{len(ready)} new alert(s)")
         if not ON_GITHUB:
             for a in sorted(ready, key=lambda a: a.filed):
                 log(f"  {a.priority} {a.filed:%H:%M} {a.dateline}: {a.text}")
         self.send(ready)
+
+    def relate(self, ready: list, found: dict) -> list:
+        """Works out how each new alert relates to the rest of today's wire
+        (see stories.py). Repeats are dropped; so is an alert that a
+        correction in this same check already replaces."""
+        batch = {a.id for a in ready}
+        keep, superseded = [], set()
+        for alert in sorted(ready, key=stories.order):
+            prior = [p for p in found.values() if p.id != alert.id
+                     and stories.key(p.slug) == stories.key(alert.slug)
+                     and stories.order(p) < stories.order(alert)]
+            try:
+                for p in prior:
+                    self.site.read(p)
+            except Exception as exc:                             # noqa: BLE001
+                log(f"  ! could not read the earlier alerts on one story ({str(exc)[:80]}); "
+                    f"sending it without them")
+                prior = []
+            alert.kind = stories.relate(alert, prior)
+            alert.earlier = [e for e in alert.earlier if e.id not in batch]
+            if alert.kind == "repeat":
+                self.state["seen"][alert.id] = int(time.time())
+                self.dirty = True
+                log("  1 alert is an exact repeat of one already filed; not sent")
+                continue
+            if alert.replaces is not None and alert.replaces.id in batch:
+                superseded.add(alert.replaces.id)
+            keep.append(alert)
+        for alert in keep:
+            if alert.id in superseded:
+                # Never sent: its correction arrived in the same check.
+                self.state["seen"][alert.id] = int(time.time())
+                self.dirty = True
+        return [a for a in keep if a.id not in superseded]
 
     def send(self, alerts: list) -> None:
         now = time.time()
@@ -321,23 +359,38 @@ def run(loop_minutes: float, dry_run: bool) -> int:
         return 1
     stop_at = time.monotonic() + loop_minutes * 60
     handed_over = False
-    while True:
-        started = time.monotonic()
-        try:
-            tracker.check()
-        except Exception as exc:                                  # noqa: BLE001
-            # Unreachable, or something unexpected such as a change to the
-            # page: reported the same way. The loop must keep going, not die
-            # on one bad answer.
-            tracker.unreachable(exc)
-        tracker.save()
-        if not handed_over and loop_minutes:
-            hand_over()
-            handed_over = True
-        if time.monotonic() + EVERY_SECONDS > stop_at:
-            break
-        time.sleep(max(1.0, EVERY_SECONDS - (time.monotonic() - started)))
-    tracker.save(force=True)
+
+    # A cancelled run (a new version going live, or a manual stop) gets a
+    # signal from GitHub a few seconds before it is killed: long enough to
+    # save what it has sent, so the next run never sends it again.
+    def stop(signum, _frame):
+        raise SystemExit(f"stopped by signal {signum}")
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+    try:
+        while True:
+            started = time.monotonic()
+            try:
+                tracker.check()
+            except Exception as exc:                              # noqa: BLE001
+                # Unreachable, or something unexpected such as a change to
+                # the page: reported the same way. The loop must keep going,
+                # not die on one bad answer.
+                tracker.unreachable(exc)
+            tracker.save()
+            if not handed_over and loop_minutes:
+                hand_over()
+                handed_over = True
+            if time.monotonic() + EVERY_SECONDS > stop_at:
+                break
+            time.sleep(max(1.0, EVERY_SECONDS - (time.monotonic() - started)))
+    except SystemExit as exc:
+        log(str(exc))
+    finally:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        tracker.save(force=True)
     log("done")
     return 0
 

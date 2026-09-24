@@ -59,6 +59,11 @@ class Alert:
     filed: dt.datetime   # when PTI filed it, IST
     text: str = ""       # the alert itself, filled in by read()
     dateline: str = ""   # KOLKATA
+    # Set by stories.relate(): the alert this one corrects, and older
+    # alerts on the same story.
+    replaces: "Alert | None" = None
+    earlier: list = dataclasses.field(default_factory=list)
+    kind: str = "new"    # new, correction or repeat
 
     @property
     def urgent(self) -> bool:
@@ -71,6 +76,9 @@ class Spectrum:
         self.session = requests.Session()
         self.session.headers["User-Agent"] = UA
         self.signed_in_at = None
+        # Texts already read in this run, by story id. Memory only: nothing
+        # from the wire is ever written to disk on GitHub.
+        self._texts = {}
 
     # ----------------------------------------------------------- signing in
 
@@ -144,10 +152,14 @@ class Spectrum:
             ZCZC / URG GEN NAT / .KOLKATA CAL12 / <slug> / <text> PTI BSM / ... / NNNN
             ~$head$~<listing line>~$head$~<word count>
         """
-        raw = self._call("getstorybystid",
-                         f"{{ Param1: '{alert.filed:%Y-%m-%d}',Param2: '{alert.id}',Param3: '{PUBCODE}'}}")
-        message = BeautifulSoup(raw.split("~$head$~")[0], "html.parser").get_text("\n")
-        alert.text, alert.dateline = parse_message(message, alert.slug)
+        if alert.id not in self._texts:
+            raw = self._call("getstorybystid",
+                             f"{{ Param1: '{alert.filed:%Y-%m-%d}',Param2: '{alert.id}',Param3: '{PUBCODE}'}}")
+            message = BeautifulSoup(raw.split("~$head$~")[0], "html.parser").get_text("\n")
+            if len(self._texts) > 2000:
+                self._texts.clear()
+            self._texts[alert.id] = parse_message(message, alert.slug)
+        alert.text, alert.dateline = self._texts[alert.id]
 
 
 def parse_message(message: str, slug: str = "") -> tuple:
