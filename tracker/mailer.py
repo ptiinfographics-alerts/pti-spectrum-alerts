@@ -77,16 +77,15 @@ def _where(alert) -> str:
     return f"{place + ' · ' if place else ''}{clock(alert.filed)} IST"
 
 
-# Gmail turns a place name followed by a number ("Palghar · 6:06") into a
-# Google Maps link, and some mail apps link times and item codes too. An
-# invisible zero-width space after each separator and colon breaks up what
-# they look for; the line still reads the same.
-_BREAK = "&#8203;"
-
-
+# Gmail turns a place name followed by a number ("Serampore · 5:38") into a
+# Google Maps link, and links dates and addresses too. Putting every word in
+# its own <span> stops it: tested in Gmail on 26 Sep 2026, where this left
+# the line plain and the old method -- zero-width spaces, which Gmail reads
+# as ordinary spaces -- still produced the Maps link. The spans are
+# invisible, and copying the text gives plain words with normal spaces.
 def _unlinked(text: str) -> str:
-    """HTML for a line of places, times and slugs that mail apps leave alone."""
-    return html.escape(text).replace(":", ":" + _BREAK).replace(" · ", _BREAK + " · " + _BREAK)
+    """HTML for a line of text that Gmail leaves alone."""
+    return " ".join(f"<span>{html.escape(word)}</span>" for word in text.split(" "))
 
 
 def label(alert) -> str:
@@ -120,7 +119,7 @@ def _card(alert, show_earlier: bool = True) -> str:
     small = f"font:400 12px/1.5 {FONT};color:{GREY};margin-top:6px;"
     mono = "font:400 11px/1.4 ui-monospace,Menlo,monospace;"
 
-    extra = "".join(f'<div style="{small}">(Eds: {html.escape(n)})</div>' for n in notes)
+    extra = "".join(f'<div style="{small}">{_unlinked("(Eds: " + n + ")")}</div>' for n in notes)
     if was_story:
         extra += f'<div style="{small}">Headline only. Filed on the wire as a full story.</div>'
 
@@ -128,14 +127,14 @@ def _card(alert, show_earlier: bool = True) -> str:
         old = alert.replaces
         if old is not None:
             words = " ".join(
-                f'<span style="background:#FFE08A;">{html.escape(w)}</span>' if changed else html.escape(w)
+                f'<span style="background:#FFE08A;">{html.escape(w)}</span>' if changed else _unlinked(w)
                 for w, changed in stories.changed_words(old.text, alert.text))
             held = " · not emailed" if old.held else ""
             extra += f"""
           <div style="background:#F3F4F6;border-radius:6px;padding:10px 12px;margin-top:14px;
                       font:400 13px/1.5 {FONT};color:#374151;">
             <div style="font-size:12px;color:{GREY};margin-bottom:4px;">Earlier version ·
-              {_unlinked(clock(old.filed) + " IST")} · <span style="{mono}">{_unlinked(stories.readable(old.slug))}</span>{held} ·
+              {_unlinked(clock(old.filed) + " IST ·")} <span style="{mono}">{_unlinked(stories.readable(old.slug))}</span>{held} ·
               differences highlighted</div>{words}
           </div>"""
         else:
@@ -149,7 +148,7 @@ def _card(alert, show_earlier: bool = True) -> str:
             f'<div style="padding:7px 0;border-top:1px solid #D1D5DB;">'
             f'<span style="font-weight:600;font-variant-numeric:tabular-nums;">{_unlinked(clock(e.filed))}</span>'
             f' &nbsp;<span style="{mono}">{_unlinked(stories.readable(e.slug))}</span><br>'
-            f'{html.escape(stories.clean(e.text)[0])}</div>'
+            f'{_unlinked(stories.clean(e.text)[0])}</div>'
             for e in sorted(alert.earlier, key=stories.order, reverse=True))
         extra += f"""
           <div style="background:#F3F4F6;border-radius:6px;margin-top:16px;padding:8px 12px 2px;
@@ -159,9 +158,9 @@ def _card(alert, show_earlier: bool = True) -> str:
 
     return f"""
         <div style="border-left:3px solid {rule};padding:12px 14px;margin-bottom:18px;background:#fff;">
-          <div style="font:400 12px/1.6 {FONT};color:{GREY};margin-bottom:8px;">{tags}{_unlinked(_where(alert))}
-            {_BREAK}· {_BREAK}<span style="{mono}">{_unlinked(stories.readable(alert.slug))}</span></div>
-          <div style="font:600 17px/1.45 {FONT};color:#111827;">{html.escape("News Alert! " + copy)}</div>{extra}
+          <div style="font:400 12px/1.6 {FONT};color:{GREY};margin-bottom:8px;">{tags}{_unlinked(_where(alert) + " ·")}
+            <span style="{mono}">{_unlinked(stories.readable(alert.slug))}</span></div>
+          <div style="font:600 17px/1.45 {FONT};color:#111827;">{_unlinked("News Alert! " + copy)}</div>{extra}
         </div>"""
 
 
